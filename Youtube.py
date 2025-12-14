@@ -1,6 +1,7 @@
 import os
 import subprocess
 import io
+import json
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -9,8 +10,12 @@ from googleapiclient.http import MediaIoBaseDownload
 FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"
 OUTPUT_VIDEO = "final_merged.mp4"
 TRANSITION_DURATION = 1  # seconds
-SERVICE_ACCOUNT_FILE = "service_account.json"
-FFMPEG_PATH = r"C:\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"  # path to ffmpeg.exe
+SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
+
+creds = Credentials.from_service_account_info(
+    SERVICE_ACCOUNT_JSON,
+    scopes=["https://www.googleapis.com/auth/drive.readonly"]
+)
 # ==============================================
 
 # Check FFmpeg exists
@@ -81,3 +86,4 @@ print("🎬 Running FFmpeg...")
 subprocess.run(cmd, shell=True, check=True)
 
 print("✅ Final video created:", OUTPUT_VIDEO)
+
