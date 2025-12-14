@@ -1,36 +1,28 @@
-name: Merge Drive Videos
+name: Merge Videos to Drive
 
 on:
   workflow_dispatch:
 
 jobs:
-  merge:
+  merge_videos:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: Checkout repo
+      uses: actions/checkout@v3
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        python-version: "3.10"
+        python-version: 3.10
 
     - name: Install dependencies
       run: |
-        sudo apt update
-        sudo apt install -y ffmpeg
-        pip install -r requirements.txt
+        python -m pip install --upgrade pip
+        pip install moviepy google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib imageio imageio-ffmpeg
 
-    - name: Create credentials file
+    - name: Run merge script
+      env:
+        GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
       run: |
-        echo '${{ secrets.GDRIVE_CREDENTIALS }}' > credentials.json
-
-    - name: Run merge
-      run: python merge_videos.py
-
-    - name: Upload result
-      uses: actions/upload-artifact@v4
-      with:
-        name: merged-video
-        path: final.mp4
+        python merge_videos.py
