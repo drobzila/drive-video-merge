@@ -11,7 +11,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"
 OUTPUT_VIDEO = "final_merged.mp4"
 TRANSITION_DURATION = 1  # seconds
-FFMPEG_PATH = r"/usr/bin/ffmpeg"  # GitHub Ubuntu default path
+FFMPEG_PATH = "/usr/bin/ffmpeg"  # GitHub Ubuntu default path
 # ==============================================
 
 # Authenticate using GitHub Secret
@@ -69,13 +69,12 @@ for i in range(len(local_files) - 1):
         filter_parts.append(f"[0:v][1:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
     else:
         filter_parts.append(f"[v{i}][{i+1}:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
-    # Calculate new offset
     clip = VideoFileClip(local_files[i])
     offset += clip.duration - TRANSITION_DURATION
 
 filter_complex = ";".join(filter_parts)
 
-# Correct f-string without any extra stars or quotes
+# Correctly build cmd without any placeholder stars
 cmd = f'{FFMPEG_PATH} {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
