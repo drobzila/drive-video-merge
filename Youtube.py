@@ -2,6 +2,7 @@ import os
 import subprocess
 import io
 import json
+from moviepy.editor import VideoFileClip
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -13,13 +14,6 @@ TRANSITION_DURATION = 1  # seconds
 FFMPEG_PATH = r"/usr/bin/ffmpeg"  # GitHub Ubuntu default path
 # ==============================================
 
-# Check FFmpeg exists
-if not os.path.isfile(FFMPEG_PATH):
-    raise FileNotFoundError(f"FFmpeg not found at {FFMPEG_PATH}")
-
-# Create workspace
-os.makedirs("videos", exist_ok=True)
-
 # Authenticate using GitHub Secret
 SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
 creds = Credentials.from_service_account_info(
@@ -28,14 +22,17 @@ creds = Credentials.from_service_account_info(
 )
 service = build('drive', 'v3', credentials=creds)
 
-# List videos in folder
+# Create workspace
+os.makedirs("videos", exist_ok=True)
+
+# List videos in Drive folder
 results = service.files().list(
     q=f"'{FOLDER_ID}' in parents and trashed=false",
     fields="files(id, name, mimeType)"
 ).execute()
 files = sorted(results.get('files', []), key=lambda x: x['name'])
 
-# Filter supported video types
+# Download video files
 local_files = []
 for i, file in enumerate(files):
     if not file['name'].lower().endswith(('.mp4', '.mov', '.mkv')):
@@ -51,44 +48,41 @@ for i, file in enumerate(files):
 
     local_files.append(f"videos/{i}.mp4")
 
-if not local_files:
-    print("❌ No video files found in the Drive folder. Make sure the folder is shared with the Service Account.")
+if len(local_files) < 2:
+    print("❌ Not enough videos for transitions. At least 2 required.")
     exit(1)
 
 print(f"✅ Downloaded {len(local_files)} video(s)")
 
-# Build FFmpeg filter_complex with transitions (xfade)
+# Build FFmpeg filter_complex for sequential xfade transitions
 filter_parts = []
 input_parts = []
-for i, vf in enumerate(local_files):
+offset = 0
+
+# Prepare inputs
+for vf in local_files:
     input_parts.append(f"-i {vf}")
 
-offset = 0
+# Sequential xfade
 for i in range(len(local_files) - 1):
-    filter_parts.append(
-        f"[{i}:v][{i+1}:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]"
-    )
-    offset += TRANSITION_DURATION
+    if i == 0:
+        filter_parts.append(f"[0:v][1:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
+    else:
+        filter_parts.append(f"[v{i}][{i+1}:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
+    # Calculate new offset
+    clip = VideoFileClip(local_files[i])
+    offset += clip.duration - TRANSITION_DURATION
 
 filter_complex = ";".join(filter_parts)
 
-if not filter_complex:
-    print("❌ Not enough videos to create transitions. At least 2 videos are required.")
-    exit(1)
-
-cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
+cmd = f'{FFMPEG_PATH} {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
 subprocess.run(cmd, shell=True, check=True)
+print(f"✅ Final video created: {OUTPUT_VIDEO}")
 
-print("✅ Final video created:", OUTPUT_VIDEO)
-
-# Upload final video to same Drive folder
-file_metadata = {
-    'name': OUTPUT_VIDEO,
-    'parents': [FOLDER_ID]
-}
+# Upload final video to the same Drive folder
+file_metadata = {'name': OUTPUT_VIDEO, 'parents': [FOLDER_ID]}
 media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
 file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 print(f"✅ Video uploaded to Drive with file ID: {file.get('id')}")
-
