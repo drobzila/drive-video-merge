@@ -2,7 +2,7 @@ import os
 import subprocess
 import io
 import json
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -11,7 +11,6 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"
 OUTPUT_VIDEO = "final_merged.mp4"
 TRANSITION_DURATION = 1  # seconds
-TARGET_RESOLUTION = (1280, 720)
 FFMPEG_PATH = "/usr/bin/ffmpeg"
 # ==============================================
 
@@ -25,7 +24,6 @@ service = build('drive', 'v3', credentials=creds)
 
 # Create workspace
 os.makedirs("videos", exist_ok=True)
-os.makedirs("resized", exist_ok=True)
 
 # List videos in Drive folder
 results = service.files().list(
@@ -39,12 +37,15 @@ local_files = []
 for i, file in enumerate(files):
     if not file['name'].lower().endswith(('.mp4', '.mov', '.mkv')):
         continue
+
     request = service.files().get_media(fileId=file['id'])
     fh = io.FileIO(f"videos/{i}.mp4", 'wb')
     downloader = MediaIoBaseDownload(fh, request)
+
     done = False
     while not done:
         status, done = downloader.next_chunk()
+
     local_files.append(f"videos/{i}.mp4")
 
 if len(local_files) < 2:
@@ -53,23 +54,32 @@ if len(local_files) < 2:
 
 print(f"✅ Downloaded {len(local_files)} video(s)")
 
-# Resize videos to TARGET_RESOLUTION
+# Resize all videos to the size of the first video to avoid xfade errors
+first_clip = VideoFileClip(local_files[0])
+target_width, target_height = first_clip.size
+
 resized_files = []
-for i, path in enumerate(local_files):
-    clip = VideoFileClip(path)
-    clip_resized = clip.resize(TARGET_RESOLUTION)
-    output_path = f"resized/{i}.mp4"
-    clip_resized.write_videofile(output_path, codec="libx264", audio_codec="aac")
-    resized_files.append(output_path)
+for i, vf in enumerate(local_files):
+    clip = VideoFileClip(vf)
+    if clip.size != (target_width, target_height):
+        resized_path = f"videos/resized_{i}.mp4"
+        clip.resize(newsize=(target_width, target_height)).write_videofile(
+            resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
+        )
+        resized_files.append(resized_path)
+    else:
+        resized_files.append(vf)
 
 # Build FFmpeg filter_complex for sequential xfade transitions
 filter_parts = []
 input_parts = []
 offset = 0
 
+# Prepare inputs
 for vf in resized_files:
     input_parts.append(f"-i {vf}")
 
+# Sequential xfade
 for i in range(len(resized_files) - 1):
     if i == 0:
         filter_parts.append(f"[0:v][1:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
@@ -80,7 +90,7 @@ for i in range(len(resized_files) - 1):
 
 filter_complex = ";".join(filter_parts)
 
-# Run FFmpeg
+# FFmpeg command
 cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(resized_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
