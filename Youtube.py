@@ -76,7 +76,7 @@ if not filter_complex:
     print("❌ Not enough videos to create transitions. At least 2 videos are required.")
     exit(1)
 
-cmd = f'{FFMPEG_PATH} {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
+cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
 subprocess.run(cmd, shell=True, check=True)
@@ -91,3 +91,4 @@ file_metadata = {
 media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
 file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 print(f"✅ Video uploaded to Drive with file ID: {file.get('id')}")
+
