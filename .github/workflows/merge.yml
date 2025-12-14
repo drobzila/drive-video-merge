@@ -1,7 +1,7 @@
 name: Merge Drive Videos
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # تشغيل يدوي
 
 jobs:
   merge:
@@ -16,10 +16,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies in correct environment
+      - name: Install dependencies in clean environment
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install moviepy google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          python -m pip uninstall -y moviepy
+          python -m pip install moviepy==2.1.0 google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -27,7 +28,7 @@ jobs:
       - name: Verify MoviePy and FFmpeg
         run: |
           python -m pip show moviepy
-          python -c "import moviepy.editor as m; print('MoviePy version:', m.__version__)"
+          python -c "from moviepy.editor import VideoFileClip; print('MoviePy editor works!')"
           ffmpeg -version
 
       - name: Run merge script
