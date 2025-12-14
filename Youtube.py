@@ -63,7 +63,8 @@ for i, vf in enumerate(local_files):
     clip = VideoFileClip(vf)
     if clip.size != (target_width, target_height):
         resized_path = f"videos/resized_{i}.mp4"
-        clip.resize(newsize=(target_width, target_height)).write_videofile(
+        # استخدم resized ثم write_videofile مرة واحدة صحيحة
+        clip.resized(newsize=(target_width, target_height)).write_videofile(
             resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
         )
         resized_files.append(resized_path)
@@ -102,3 +103,4 @@ file_metadata = {'name': OUTPUT_VIDEO, 'parents': [FOLDER_ID]}
 media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
 file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 print(f"✅ Video uploaded to Drive with file ID: {file.get('id')}")
+
