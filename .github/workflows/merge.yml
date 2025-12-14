@@ -1,0 +1,36 @@
+name: Merge Drive Videos
+
+on:
+  workflow_dispatch:   # تشغيل يدوي
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run merge script
+        env:
+          GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+        run: |
+          python youtube.py
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-video
+          path: final_merged.mp4
