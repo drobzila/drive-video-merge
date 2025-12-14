@@ -75,6 +75,7 @@ for i in range(len(local_files) - 1):
 
 filter_complex = ";".join(filter_parts)
 
+# Correct f-string without any extra stars or quotes
 cmd = f'{FFMPEG_PATH} {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
