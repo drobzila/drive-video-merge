@@ -1,40 +1,108 @@
-from moviepy import VideoFileClip, concatenate_videoclips
 import os
+import subprocess
+import io
+import json
+from moviepy.editor import VideoFileClip
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
-# مجلد الفيديوهات
-video_folder = "videos"
-local_files = [os.path.join(video_folder, f) for f in sorted(os.listdir(video_folder)) if f.endswith(".mp4")]
+# ================== SETTINGS ==================
+FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"  # ضع هنا مجلد الفيديوهات على Drive
+OUTPUT_VIDEO = "final_merged.mp4"
+TRANSITION_DURATION = 1  # مدة الانتقال بالثواني
+FFMPEG_PATH = "/usr/bin/ffmpeg"  # المسار الافتراضي لـ FFmpeg على GitHub Ubuntu
+# ==============================================
 
-# استخدام أول فيديو كمرجع للحجم
-first_clip = VideoFileClip(local_files[0])
-target_width, target_height = first_clip.size
-
-clips = []
-
-# تحميل وتعديل حجم الفيديوهات إذا لزم الأمر
-for vf in local_files:
-    clip = VideoFileClip(vf)
-    if clip.size != (target_width, target_height):
-        clip = clip.resize((target_width, target_height))
-    clips.append(clip)
-
-# إعداد Fade Transition بين الفيديوهات
-fade_duration = 1  # مدة الانتقال بالثواني
-clips_with_fade = []
-
-for i, clip in enumerate(clips):
-    if i > 0:
-        clip = clip.crossfadein(fade_duration)
-    clips_with_fade.append(clip)
-
-# دمج الفيديوهات
-final_video = concatenate_videoclips(clips_with_fade, method="compose")
-
-# حفظ الفيديو النهائي
-final_video.write_videofile(
-    "final_merged.mp4",
-    codec="libx264",
-    audio_codec="aac",
-    threads=4,
-    fps=30  # ضبط FPS لتجنب مشاكل FFmpeg
+# Authenticate using GitHub Secret
+SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
+creds = Credentials.from_service_account_info(
+    SERVICE_ACCOUNT_JSON,
+    scopes=["https://www.googleapis.com/auth/drive"]
 )
+service = build('drive', 'v3', credentials=creds)
+
+# Create workspace
+os.makedirs("videos", exist_ok=True)
+
+# List videos in Drive folder
+results = service.files().list(
+    q=f"'{FOLDER_ID}' in parents and trashed=false",
+    fields="files(id, name, mimeType)"
+).execute()
+files = sorted(results.get('files', []), key=lambda x: x['name'])
+
+# Download video files
+local_files = []
+for i, file in enumerate(files):
+    if not file['name'].lower().endswith(('.mp4', '.mov', '.mkv')):
+        continue
+
+    request = service.files().get_media(fileId=file['id'])
+    fh = io.FileIO(f"videos/{i}.mp4", 'wb')
+    downloader = MediaIoBaseDownload(fh, request)
+
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+
+    local_files.append(f"videos/{i}.mp4")
+
+if len(local_files) < 2:
+    print("❌ Not enough videos for transitions. At least 2 required.")
+    exit(1)
+
+print(f"✅ Downloaded {len(local_files)} video(s)")
+
+# ================== Resize Videos ==================
+# Make all videos the same size as the first video
+first_clip = VideoFileClip(local_files[0])
+target_size = first_clip.size  # (width, height)
+
+resized_files = []
+for i, vf in enumerate(local_files):
+    clip = VideoFileClip(vf)
+    if clip.size != target_size:
+        resized_path = f"videos/resized_{i}.mp4"
+        clip.resize(target_size).write_videofile(
+            resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
+        )
+        resized_files.append(resized_path)
+    else:
+        resized_files.append(vf)
+
+local_files = resized_files
+print("✅ All videos resized to same dimensions")
+
+# ================== Build FFmpeg xfade ==================
+filter_parts = []
+input_parts = []
+offset = 0
+
+# Prepare inputs
+for vf in local_files:
+    input_parts.append(f"-i {vf}")
+
+# Sequential xfade
+for i in range(len(local_files) - 1):
+    if i == 0:
+        filter_parts.append(f"[0:v][1:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
+    else:
+        filter_parts.append(f"[v{i}][{i+1}:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
+    clip = VideoFileClip(local_files[i])
+    offset += clip.duration - TRANSITION_DURATION
+
+filter_complex = ";".join(filter_parts)
+
+# FFmpeg command
+cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
+
+print("🎬 Running FFmpeg...")
+subprocess.run(cmd, shell=True, check=True)
+print(f"✅ Final video created: {OUTPUT_VIDEO}")
+
+# ================== Upload final video to Drive ==================
+file_metadata = {'name': OUTPUT_VIDEO, 'parents': [FOLDER_ID]}
+media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
+file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+print(f"✅ Video uploaded to Drive with file ID: {file.get('id')}")
