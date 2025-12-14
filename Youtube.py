@@ -74,8 +74,8 @@ for i in range(len(local_files) - 1):
 
 filter_complex = ";".join(filter_parts)
 
-# Correctly build cmd without any placeholder stars
-cmd = f'{FFMPEG_PATH} {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
+# Correct FFmpeg command without placeholders
+cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
 subprocess.run(cmd, shell=True, check=True)
