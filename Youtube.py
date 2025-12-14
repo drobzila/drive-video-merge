@@ -4,18 +4,13 @@ import io
 import json
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 # ================== SETTINGS ==================
 FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"
 OUTPUT_VIDEO = "final_merged.mp4"
 TRANSITION_DURATION = 1  # seconds
-SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
-
-creds = Credentials.from_service_account_info(
-    SERVICE_ACCOUNT_JSON,
-    scopes=["https://www.googleapis.com/auth/drive.readonly"]
-)
+FFMPEG_PATH = r"/usr/bin/ffmpeg"  # GitHub Ubuntu default path
 # ==============================================
 
 # Check FFmpeg exists
@@ -25,10 +20,11 @@ if not os.path.isfile(FFMPEG_PATH):
 # Create workspace
 os.makedirs("videos", exist_ok=True)
 
-# Authenticate
-creds = Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE,
-    scopes=["https://www.googleapis.com/auth/drive.readonly"]
+# Authenticate using GitHub Secret
+SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
+creds = Credentials.from_service_account_info(
+    SERVICE_ACCOUNT_JSON,
+    scopes=["https://www.googleapis.com/auth/drive"]
 )
 service = build('drive', 'v3', credentials=creds)
 
@@ -80,10 +76,18 @@ if not filter_complex:
     print("❌ Not enough videos to create transitions. At least 2 videos are required.")
     exit(1)
 
-cmd = f'"{FFMPEG_PATH}" {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
+cmd = f'{FFMPEG_PATH} {' '.join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
 subprocess.run(cmd, shell=True, check=True)
 
 print("✅ Final video created:", OUTPUT_VIDEO)
 
+# Upload final video to same Drive folder
+file_metadata = {
+    'name': OUTPUT_VIDEO,
+    'parents': [FOLDER_ID]
+}
+media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
+file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+print(f"✅ Video uploaded to Drive with file ID: {file.get('id')}")
