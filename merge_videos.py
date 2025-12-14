@@ -5,7 +5,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-FOLDER_ID = "PUT_FOLDER_ID_HERE"
+FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"
 OUTPUT_VIDEO = "final.mp4"
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -49,3 +49,4 @@ cmd = f'ffmpeg {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "
 subprocess.run(cmd, shell=True, check=True)
 
 print("✅ تم دمج الفيديوهات بنجاح")
+
