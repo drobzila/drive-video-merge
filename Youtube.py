@@ -1,17 +1,21 @@
-from moviepy import VideoFileClip
 import os
 import subprocess
 import io
 import json
+from moviepy.editor import VideoFileClip
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
+# ================== SETTINGS ==================
 FOLDER_ID = "1ZGX6heziORR_6JUjXB-o7qCHiJQgAgyT"
 OUTPUT_VIDEO = "final_merged.mp4"
 TRANSITION_DURATION = 1  # seconds
+TARGET_RESOLUTION = (1280, 720)
 FFMPEG_PATH = "/usr/bin/ffmpeg"
+# ==============================================
 
+# Authenticate using GitHub Secret
 SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
 creds = Credentials.from_service_account_info(
     SERVICE_ACCOUNT_JSON,
@@ -19,14 +23,18 @@ creds = Credentials.from_service_account_info(
 )
 service = build('drive', 'v3', credentials=creds)
 
+# Create workspace
 os.makedirs("videos", exist_ok=True)
+os.makedirs("resized", exist_ok=True)
 
+# List videos in Drive folder
 results = service.files().list(
     q=f"'{FOLDER_ID}' in parents and trashed=false",
     fields="files(id, name, mimeType)"
 ).execute()
 files = sorted(results.get('files', []), key=lambda x: x['name'])
 
+# Download video files
 local_files = []
 for i, file in enumerate(files):
     if not file['name'].lower().endswith(('.mp4', '.mov', '.mkv')):
@@ -45,29 +53,41 @@ if len(local_files) < 2:
 
 print(f"✅ Downloaded {len(local_files)} video(s)")
 
+# Resize videos to TARGET_RESOLUTION
+resized_files = []
+for i, path in enumerate(local_files):
+    clip = VideoFileClip(path)
+    clip_resized = clip.resize(TARGET_RESOLUTION)
+    output_path = f"resized/{i}.mp4"
+    clip_resized.write_videofile(output_path, codec="libx264", audio_codec="aac")
+    resized_files.append(output_path)
+
 # Build FFmpeg filter_complex for sequential xfade transitions
 filter_parts = []
 input_parts = []
 offset = 0
 
-for vf in local_files:
+for vf in resized_files:
     input_parts.append(f"-i {vf}")
 
-for i in range(len(local_files) - 1):
+for i in range(len(resized_files) - 1):
     if i == 0:
         filter_parts.append(f"[0:v][1:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
     else:
         filter_parts.append(f"[v{i}][{i+1}:v]xfade=transition=fade:duration={TRANSITION_DURATION}:offset={offset}[v{i+1}]")
-    clip = VideoFileClip(local_files[i])
+    clip = VideoFileClip(resized_files[i])
     offset += clip.duration - TRANSITION_DURATION
 
 filter_complex = ";".join(filter_parts)
-cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(local_files)-1}]" -y {OUTPUT_VIDEO}'
+
+# Run FFmpeg
+cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(resized_files)-1}]" -y {OUTPUT_VIDEO}'
 
 print("🎬 Running FFmpeg...")
 subprocess.run(cmd, shell=True, check=True)
 print(f"✅ Final video created: {OUTPUT_VIDEO}")
 
+# Upload final video to Drive
 file_metadata = {'name': OUTPUT_VIDEO, 'parents': [FOLDER_ID]}
 media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
 file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
