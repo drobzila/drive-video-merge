@@ -2,7 +2,8 @@ import os
 import subprocess
 import io
 import json
-from moviepy.editor import VideoFileClip
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.fx.all import resize
 from moviepy.video.fx.all import resize
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -116,3 +117,4 @@ for f in local_files + resized_files + [OUTPUT_VIDEO]:
     if os.path.exists(f):
         os.remove(f)
 print("🧹 Local files cleaned up.")
+
