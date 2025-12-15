@@ -3,6 +3,7 @@ import subprocess
 import io
 import json
 from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.fx.all import resize  # الطريقة الصحيحة في MoviePy 2.2.1
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -66,10 +67,10 @@ first_clip.close()
 resized_files = []
 for i, vf in enumerate(local_files):
     clip = VideoFileClip(vf)
-    # Resize directly without fx
+    # Resize using MoviePy 2.2.1 fx
     if clip.size != (target_width, target_height):
         resized_path = f"videos/resized_{i}.mp4"
-        clip_resized = clip.resize(newsize=(target_width, target_height))
+        clip_resized = resize(clip, newsize=(target_width, target_height))
         clip_resized.write_videofile(
             resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
         )
