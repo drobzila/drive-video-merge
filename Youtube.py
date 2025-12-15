@@ -66,10 +66,10 @@ first_clip.close()
 resized_files = []
 for i, vf in enumerate(local_files):
     clip = VideoFileClip(vf)
+    # Resize directly without fx
     if clip.size != (target_width, target_height):
         resized_path = f"videos/resized_{i}.mp4"
-        # Use fx with lambda to resize
-        clip_resized = clip.fx(lambda c: c.resize(newsize=(target_width, target_height)))
+        clip_resized = clip.resize(newsize=(target_width, target_height))
         clip_resized.write_videofile(
             resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
         )
