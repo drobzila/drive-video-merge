@@ -2,7 +2,8 @@ import os
 import subprocess
 import io
 import json
-from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip
+from moviepy.video.fx.all import resize
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -15,7 +16,11 @@ FFMPEG_PATH = "/usr/bin/ffmpeg"
 # ==============================================
 
 # Authenticate using GitHub Secret
-SERVICE_ACCOUNT_JSON = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT"])
+sa_json_str = os.environ.get("GDRIVE_SERVICE_ACCOUNT")
+if not sa_json_str:
+    raise ValueError("Environment variable GDRIVE_SERVICE_ACCOUNT is empty or not set")
+SERVICE_ACCOUNT_JSON = json.loads(sa_json_str)
+
 creds = Credentials.from_service_account_info(
     SERVICE_ACCOUNT_JSON,
     scopes=["https://www.googleapis.com/auth/drive"]
@@ -63,12 +68,14 @@ for i, vf in enumerate(local_files):
     clip = VideoFileClip(vf)
     if clip.size != (target_width, target_height):
         resized_path = f"videos/resized_{i}.mp4"
-        clip.resize(height=target_height, width=target_width).write_videofile(
+        clip_resized = clip.fx(resize, newsize=(target_width, target_height))
+        clip_resized.write_videofile(
             resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
         )
         resized_files.append(resized_path)
     else:
         resized_files.append(vf)
+    clip.close()
 
 # Build FFmpeg filter_complex for sequential xfade transitions
 filter_parts = []
@@ -89,6 +96,7 @@ for i in range(len(resized_files) - 1):
         )
     clip = VideoFileClip(resized_files[i])
     offset += clip.duration - TRANSITION_DURATION
+    clip.close()
 
 filter_complex = ";".join(filter_parts)
 cmd = f'{FFMPEG_PATH} {" ".join(input_parts)} -filter_complex "{filter_complex}" -map "[v{len(resized_files)-1}]" -y {OUTPUT_VIDEO}'
@@ -102,3 +110,9 @@ file_metadata = {'name': OUTPUT_VIDEO, 'parents': [FOLDER_ID]}
 media = MediaFileUpload(OUTPUT_VIDEO, mimetype='video/mp4')
 file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 print(f"✅ Video uploaded to Drive with file ID: {file.get('id')}")
+
+# Optional: clean up local video files
+for f in local_files + resized_files + [OUTPUT_VIDEO]:
+    if os.path.exists(f):
+        os.remove(f)
+print("🧹 Local files cleaned up.")
