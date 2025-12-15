@@ -1,24 +1,27 @@
 name: Merge Drive Videos
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # لتشغيله يدويًا من GitHub
 
 jobs:
   merge:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.10
+          python-version: 3.10  # استخدم إصدار حديث ومستقر
 
       - name: Install dependencies
-        run: pip install moviepy google-api-python-client google-auth
+        run: |
+          pip install --upgrade pip
+          pip install moviepy google-api-python-client google-auth
 
       - name: Run merge script
         env:
-          GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}  # يجب إنشاء هذا secret في GitHub
         run: python merge_videos.py
