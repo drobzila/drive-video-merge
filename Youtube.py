@@ -3,7 +3,6 @@ import subprocess
 import io
 import json
 from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.fx.resize import resize
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -69,7 +68,8 @@ for i, vf in enumerate(local_files):
     clip = VideoFileClip(vf)
     if clip.size != (target_width, target_height):
         resized_path = f"videos/resized_{i}.mp4"
-        clip_resized = clip.fx(resize, newsize=(target_width, target_height))
+        # Use fx with lambda to resize
+        clip_resized = clip.fx(lambda c: c.resize(newsize=(target_width, target_height)))
         clip_resized.write_videofile(
             resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
         )
