@@ -3,7 +3,7 @@ import subprocess
 import io
 import json
 from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.fx.all import resize
+from moviepy.video.fx.resize import resize
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -62,6 +62,7 @@ print(f"✅ Downloaded {len(local_files)} video(s)")
 # Resize all videos to the size of the first clip
 first_clip = VideoFileClip(local_files[0])
 target_width, target_height = first_clip.size
+first_clip.close()
 
 resized_files = []
 for i, vf in enumerate(local_files):
@@ -73,6 +74,7 @@ for i, vf in enumerate(local_files):
             resized_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
         )
         resized_files.append(resized_path)
+        clip_resized.close()
     else:
         resized_files.append(vf)
     clip.close()
@@ -116,5 +118,3 @@ for f in local_files + resized_files + [OUTPUT_VIDEO]:
     if os.path.exists(f):
         os.remove(f)
 print("🧹 Local files cleaned up.")
-
-
